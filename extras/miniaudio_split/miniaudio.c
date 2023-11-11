@@ -13,6 +13,11 @@ GitHub:        https://github.com/mackron/miniaudio
 #ifndef miniaudio_c
 #define miniaudio_c
 
+#ifndef _MSC_VER
+#pragma clang diagnostic ignored "-Wunused-function"
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#endif
+
 #include <assert.h>
 #include <limits.h>         /* For INT_MAX */
 #include <math.h>           /* sin(), etc. */
