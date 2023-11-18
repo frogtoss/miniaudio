@@ -1,3 +1,5 @@
+#pragma once
+
 /*
 Audio playback and capture library. Choice of public domain or MIT-0. See license statements at the end of this file.
 miniaudio - v0.11.20 - 2023-11-10
@@ -8,8 +10,12 @@ Website:       https://miniaud.io
 Documentation: https://miniaud.io/docs
 GitHub:        https://github.com/mackron/miniaudio
 */
+
 #ifndef miniaudio_h
 #define miniaudio_h
+
+// this file sets defines for ftg-only and is not in this repo
+#include "miniaudioconfig.h"
 
 #ifdef __cplusplus
 extern "C" {
