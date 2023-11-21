@@ -29016,19 +29016,20 @@ static ma_result ma_context_init__webaudio(ma_context* pContext, const ma_contex
 
             /* Device cache for mapping devices to indexes for JavaScript/C interop. */
             let miniaudio = window.miniaudio;
+            miniaudio.devices = [];
 
             miniaudio.track_device = function(device) {
                 /* Try inserting into a free slot first. */
-                for (var iDevice = 0; iDevice < window.miniaudio.devices.length; ++iDevice) {
-                    if (window.miniaudio.devices[iDevice] == null) {
-                        window.miniaudio.devices[iDevice] = device;
+                for (var iDevice = 0; iDevice < miniaudio.devices.length; ++iDevice) {
+                    if (miniaudio.devices[iDevice] == null) {
+                        miniaudio.devices[iDevice] = device;
                         return iDevice;
                     }
                 }
 
                 /* Getting here means there is no empty slots in the array so we just push to the end. */
-                window.miniaudio.devices.push(device);
-                return window.miniaudio.devices.length - 1;
+                miniaudio.devices.push(device);
+                return miniaudio.devices.length - 1;
             };
 
             miniaudio.untrack_device_by_index = function(deviceIndex) {
@@ -29069,7 +29070,7 @@ static ma_result ma_context_init__webaudio(ma_context* pContext, const ma_contex
                         device.state === window.miniaudio.device_state.started) {
 
                         device.webaudio.resume().then(() => {
-                                Module._ma_device__on_notification_unlocked(device.pDevice);
+                                _ma_device__on_notification_unlocked(device.pDevice);
                             },
                             (error) => {console.error("Failed to resume audiocontext", error);
                             });
