@@ -1,6 +1,6 @@
 /*
 Audio playback and capture library. Choice of public domain or MIT-0. See license statements at the end of this file.
-miniaudio - v0.11.21 - 2023-11-15
+miniaudio - v0.11.22 - TBD
 
 David Reid - mackron@gmail.com
 
@@ -12605,9 +12605,12 @@ static ma_result ma_context_create_IDirectSound__dsound(ma_context* pContext, ma
     }
 
     /* The cooperative level must be set before doing anything else. */
-    hWnd = ((MA_PFN_GetForegroundWindow)pContext->win32.GetForegroundWindow)();
+    hWnd = (HWND)pContext->dsound.hWnd;
     if (hWnd == 0) {
-        hWnd = ((MA_PFN_GetDesktopWindow)pContext->win32.GetDesktopWindow)();
+        hWnd = ((MA_PFN_GetForegroundWindow)pContext->win32.GetForegroundWindow)();
+        if (hWnd == 0) {
+            hWnd = ((MA_PFN_GetDesktopWindow)pContext->win32.GetDesktopWindow)();
+        }
     }
 
     hr = ma_IDirectSound_SetCooperativeLevel(pDirectSound, hWnd, (shareMode == ma_share_mode_exclusive) ? MA_DSSCL_EXCLUSIVE : MA_DSSCL_PRIORITY);
@@ -13923,6 +13926,8 @@ static ma_result ma_context_init__dsound(ma_context* pContext, const ma_context_
         pContext->dsound.DirectSoundCaptureEnumerateA == NULL) {
         return MA_API_NOT_FOUND;
     }
+
+    pContext->dsound.hWnd = pConfig->dsound.hWnd;
 
     pCallbacks->onContextInit             = ma_context_init__dsound;
     pCallbacks->onContextUninit           = ma_context_uninit__dsound;
@@ -16644,6 +16649,7 @@ static ma_result ma_device_stop__alsa(ma_device* pDevice)
     a small chance that our wakeupfd has not been cleared. We'll clear that out now if applicable.
     */
     int resultPoll;
+    int resultRead;
 
     if (pDevice->type == ma_device_type_capture || pDevice->type == ma_device_type_duplex) {
         ma_log_postf(ma_device_get_log(pDevice), MA_LOG_LEVEL_DEBUG, "[ALSA] Dropping capture device...\n");
@@ -16658,12 +16664,15 @@ static ma_result ma_device_stop__alsa(ma_device* pDevice)
             ma_log_postf(ma_device_get_log(pDevice), MA_LOG_LEVEL_DEBUG, "[ALSA] Preparing capture device successful.\n");
         }
 
-    /* Clear the wakeupfd. */
-    resultPoll = poll((struct pollfd*)pDevice->alsa.pPollDescriptorsCapture, 1, 0);
-    if (resultPoll > 0) {
-        ma_uint64 t;
-        read(((struct pollfd*)pDevice->alsa.pPollDescriptorsCapture)[0].fd, &t, sizeof(t));
-    }
+        /* Clear the wakeupfd. */
+        resultPoll = poll((struct pollfd*)pDevice->alsa.pPollDescriptorsCapture, 1, 0);
+        if (resultPoll > 0) {
+            ma_uint64 t;
+            resultRead = read(((struct pollfd*)pDevice->alsa.pPollDescriptorsCapture)[0].fd, &t, sizeof(t));
+            if (resultRead != sizeof(t)) {
+                ma_log_postf(ma_device_get_log(pDevice), MA_LOG_LEVEL_DEBUG, "[ALSA] Failed to read from capture wakeupfd. read() = %d\n", resultRead);
+            }
+        }
     }
 
     if (pDevice->type == ma_device_type_playback || pDevice->type == ma_device_type_duplex) {
@@ -16680,11 +16689,14 @@ static ma_result ma_device_stop__alsa(ma_device* pDevice)
         }
 
         /* Clear the wakeupfd. */
-    resultPoll = poll((struct pollfd*)pDevice->alsa.pPollDescriptorsPlayback, 1, 0);
-    if (resultPoll > 0) {
-        ma_uint64 t;
-        read(((struct pollfd*)pDevice->alsa.pPollDescriptorsPlayback)[0].fd, &t, sizeof(t));
-    }
+        resultPoll = poll((struct pollfd*)pDevice->alsa.pPollDescriptorsPlayback, 1, 0);
+        if (resultPoll > 0) {
+            ma_uint64 t;
+            resultRead = read(((struct pollfd*)pDevice->alsa.pPollDescriptorsPlayback)[0].fd, &t, sizeof(t));
+            if (resultRead != sizeof(t)) {
+                ma_log_postf(ma_device_get_log(pDevice), MA_LOG_LEVEL_DEBUG, "[ALSA] Failed to read from playback wakeupfd. read() = %d\n", resultRead);
+            }
+        }
 
     }
 
@@ -28562,7 +28574,6 @@ static void ma_audio_worklet_processor_created__webaudio(EMSCRIPTEN_WEBAUDIO_T a
         return;
     }
 
-
     pParameters->pDevice->webaudio.audioWorklet = emscripten_create_wasm_audio_worklet_node(audioContext, "miniaudio", &audioWorkletOptions, &ma_audio_worklet_process_callback__webaudio, pParameters->pDevice);
 
     /* With the audio worklet initialized we can now attach it to the graph. */
@@ -28701,7 +28712,6 @@ static ma_result ma_device_init__webaudio(ma_device* pDevice, const ma_device_co
 
         /* It's not clear if this can return an error. None of the tests in the Emscripten repository check for this, so neither am I for now. */
         pDevice->webaudio.audioContext = emscripten_create_audio_context(&audioContextAttributes);
-
 
         /*
         With the context created we can now create the worklet. We can only have a single worklet per audio
@@ -29067,13 +29077,14 @@ static ma_result ma_context_init__webaudio(ma_context* pContext, const ma_contex
                     var device = miniaudio.devices[i];
                     if (device != null &&
                         device.webaudio != null &&
-                        device.state === window.miniaudio.device_state.started) {
+                        device.state === miniaudio.device_state.started) {
 
                         device.webaudio.resume().then(() => {
-                                _ma_device__on_notification_unlocked(device.pDevice);
-                            },
-                            (error) => {console.error("Failed to resume audiocontext", error);
-                            });
+                            _ma_device__on_notification_unlocked(device.pDevice);
+                        },
+                        (error) => {
+							console.error("Failed to resume audiocontext", error);
+                        });
                     }
                 }
                 miniaudio.unlock_event_types.map(function(event_type) {
